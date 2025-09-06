@@ -6,119 +6,186 @@
   <title>Encuentra el regAlma</title>
   <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/almayfacu/imagenes-flipbook/refs/heads/main/alma.png">
   <style>
+    :root{ --vh: 1vh; }
+
     * { box-sizing: border-box; margin:0; padding:0 }
+    html, body { height: 100%; }
+
     body {
       background: #ffe4ec;
-      font-family: 'Comic Sans MS';
+      font-family: 'Comic Sans MS', system-ui, -apple-system, Segoe UI, Roboto, Arial;
       color: #ff7f7f;
       display: flex; flex-direction: column;
       align-items: center; justify-content: flex-start;
-      min-height: 100vh; padding: 20px;
-      position: relative; overflow: hidden;
+      /* usar unidades seguras de viewport (evita recortes en móviles) */
+      min-height: 100svh;
+      min-height: calc(var(--vh, 1vh) * 100);
+      padding: 20px;
+      padding-left: env(safe-area-inset-left, 20px);
+      padding-right: env(safe-area-inset-right, 20px);
+      padding-top: env(safe-area-inset-top, 20px);
+      padding-bottom: env(safe-area-inset-bottom, 20px);
+      position: relative;
+      overflow-x: hidden;   /* nunca cortar horizontal */
     }
-    h1 { margin-bottom: 10px; font-size: 2em; text-align:center;}
-    #tries { margin-bottom: 20px; font-size:1.3em }
+
+    h1 { margin-bottom: 10px; font-size: clamp(1.4rem, 2.8vw, 2rem); text-align:center;}
+    #tries { margin-bottom: 16px; font-size: clamp(1rem, 2.2vw, 1.3rem); }
+
+    /* ===== GRID (10 cajas) ===== */
     .grid {
       display: grid;
+      /* desktop/tablet ancho: 5 x 2 como tenías */
       grid-template-columns: repeat(5, 1fr);
-      grid-template-rows: repeat(2, auto);
-      gap: 16px;
+      grid-auto-rows: 1fr;
+      gap: clamp(8px, 1.5vw, 16px);
       width: 100%;
       max-width: 1000px;
       margin: 0 auto;
     }
+    /* móviles angostos: 4 columnas x 3 filas (última incompleta) pero mostramos 10 cajas igualmente */
+    @media (max-width: 520px) {
+      .grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    /* landscape muy bajo (ej. iPhone girado): hacer las celdas más pequeñas para que quepa todo */
+    @media (max-height: 420px) and (orientation: landscape) {
+      .grid { gap: 6px; }
+    }
+
     .box {
       position: relative;
-      width: 100%; height: 0;
-      padding-bottom: 100%; /* Mantiene la relación de aspecto 1:1 */
+      width: 100%; aspect-ratio: 1 / 1;  /* cuadradas sin hacks */
       cursor: pointer;
       transition: opacity .2s, transform .2s;
       overflow: hidden;
+      will-change: transform;
     }
-    .box:hover { transform: scale(1.05) }
+    .box:hover { transform: scale(1.04) }
     .box.opened { cursor: default; opacity: .6; pointer-events: none }
     .box img.gift-img {
-      position: absolute;
-      top: 0; left: 0;
+      position: absolute; inset: 0;
       width: 100%; height: 100%;
       object-fit: contain;
       display: block;
     }
+
+    /* ===== OVERLAY de resultado (siempre visible y usable) ===== */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      padding:
+        calc(env(safe-area-inset-top, 0px) + 16px)
+        calc(env(safe-area-inset-right, 0px) + 16px)
+        calc(env(safe-area-inset-bottom, 0px) + 16px)
+        calc(env(safe-area-inset-left, 0px) + 16px);
+      background: rgba(255, 228, 236, 0.96);
+      display: none;            /* se muestra con .show */
+      z-index: 10;
+      /* contenedor flexible que centra y además permite scroll si es necesario */
+      overflow: auto;
+    }
+    .overlay.show { display: block; }
+
+    .overlay__content {
+      min-height: calc(100svh - 32px);
+      min-height: calc(var(--vh, 1vh) * 100 - 32px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center; /* centra verticalmente */
+      gap: 14px;
+    }
+
     #winner-overlay {
-      display: none;
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      max-width: 90vw; max-height: 70vh;
+      max-width: min(92vw, 1000px);
+      /* que siempre se vea completa */
+      max-height: min(72svh, 720px);
+      max-height: min(calc(var(--vh, 1vh) * 72), 720px);
+      width: auto; height: auto;
+      object-fit: contain;
       border-radius: 10px;
-      box-shadow: 0 0 20px rgba(0,0,0,0.5);
-      z-index: 5;
+      box-shadow: 0 0 20px rgba(0,0,0,0.25);
+      display: block;
     }
+
     #message {
-      font-size: 1.5em;
-      margin-top: 20px;
+      font-size: clamp(1.1rem, 2.4vw, 1.5rem);
       text-align: center;
-      display: none;
-      z-index: 6;
+      color: #ff5e7e;
     }
+
     #restart {
-      padding: 12px 24px;
-      font-size: 1.1em;
+      padding: 12px 22px;
+      font-size: clamp(1rem, 2.2vw, 1.1rem);
       background: #ff7f7f;
       color: white;
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
-      display: none;
-      z-index: 6;
-      margin-top: 20px;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+      margin-top: 4px;
+      touch-action: manipulation;
     }
+    #restart:active { transform: translateY(1px); }
+
+    /* confetti por detrás del overlay */
     .confetti {
-      position: absolute; width: 12px; height: 12px;
-      border-radius: 50%; animation: fall 2s linear infinite;
+      position: fixed;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      animation: fall 2s linear infinite;
       z-index: 4;
+      pointer-events: none;
     }
-    @keyframes fall {0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(100vh) rotate(720deg);opacity:0}}
-    @media (max-width: 600px) {
-      h1 { font-size: 1.5em; }
-      #tries { font-size: 1em; }
-      #message { font-size: 1.2em; }
-      #restart { font-size: 0.9em; padding: 10px 20px; }
-      #winner-overlay { max-height: 50vh; }
-      .grid {
-        grid-template-columns: repeat(5, 1fr);
-        gap: 8px;
-      }
-      .box { padding-bottom: 100%; }
-    }
-    @media (max-width: 400px) {
-      .grid {
-        grid-template-columns: repeat(5, 1fr);
-        gap: 4px;
-      }
-      .box { padding-bottom: 100%; }
+    @keyframes fall {
+      0% { transform: translateY(-10vh) rotate(0deg); opacity: 1 }
+      100% { transform: translateY(110vh) rotate(720deg); opacity: 0 }
     }
   </style>
 </head>
 <body>
   <h1 id="title">Encuentra el regalo con la razón</h1>
   <div id="tries">Te quedan <span id="count">3</span> intentos</div>
+
   <div class="grid" id="grid"></div>
-  <img id="winner-overlay" src="mirada.png" alt="Resultado">
-  <div class="message" id="message"></div>
-  <button id="restart" onclick="initGame()">Volver a jugar</button>
-  <audio id="sound-click" src="abrir.mp3"></audio>
-  <audio id="sound-win" src="aplausos.mp3"></audio>
-  <audio id="sound-fail" src="fail.mp3"></audio>
+
+  <!-- OVERLAY de resultado (imagen + mensaje + botón SIEMPRE visibles) -->
+  <div class="overlay" id="resultOverlay" aria-hidden="true">
+    <div class="overlay__content">
+      <img id="winner-overlay" src="mirada.png" alt="Resultado">
+      <div class="message" id="message"></div>
+      <button id="restart">Volver a jugar</button>
+    </div>
+  </div>
+
+  <!-- Sonidos -->
+  <audio id="sound-click" src="abrir.mp3" preload="auto"></audio>
+  <audio id="sound-win"   src="aplausos.mp3" preload="auto"></audio>
+  <audio id="sound-fail"  src="fail.mp3" preload="auto"></audio>
+
   <script>
+    // ===== Fix universal de viewport (móviles + rotación) =====
+    function setVHVar() {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+    setVHVar();
+    window.addEventListener('load', setVHVar, { passive: true });
+    window.addEventListener('resize', setVHVar, { passive: true });
+    window.addEventListener('orientationchange', () => setTimeout(setVHVar, 150), { passive: true });
+
+    // ===== Juego (misma lógica) =====
     const TOTAL = 10, MAX_TRIES = 3, WINNERS = 2;
     let tries, winningSet, ended;
+
     const title = document.getElementById('title');
     const triesEl = document.getElementById('tries');
     const grid = document.getElementById('grid');
+    const overlay = document.getElementById('resultOverlay');
     const restartBtn = document.getElementById('restart');
     const winnerImg = document.getElementById('winner-overlay');
     const msg = document.getElementById('message');
+
     const sounds = {
       click: document.getElementById('sound-click'),
       win: document.getElementById('sound-win'),
@@ -134,7 +201,8 @@
 
     function playSound(soundKey) {
       stopAllSounds();
-      sounds[soundKey].play();
+      const a = sounds[soundKey];
+      a && a.play().catch(()=>{});
     }
 
     function initGame(){
@@ -144,19 +212,24 @@
         winningSet.add(Math.floor(Math.random()*TOTAL));
       }
       document.getElementById('count').textContent = tries;
-      restartBtn.style.display = 'none';
-      winnerImg.style.display = 'none';
-      msg.style.display = 'none';
-      msg.textContent = '';
+
+      // Reset UI base
       title.style.display = '';
       triesEl.style.display = '';
       grid.style.display = 'grid';
+      overlay.classList.remove('show');
+      overlay.setAttribute('aria-hidden', 'true');
+      msg.textContent = '';
+      winnerImg.src = 'mirada.png';
+      winnerImg.style.display = 'block';
+
+      // Re-render grid
       grid.innerHTML = '';
       for(let i=0; i<TOTAL; i++){
         const box = document.createElement('div');
         box.className = 'box';
         box.dataset.index = i;
-        box.innerHTML = `<img class=\"gift-img\" src=\"caja.png\" alt=\"Regalo\">`;
+        box.innerHTML = `<img class="gift-img" src="caja.png" alt="Regalo">`;
         box.addEventListener('click', onBoxClick);
         grid.appendChild(box);
       }
@@ -177,21 +250,27 @@
       }
     }
 
+    function openOverlay() {
+      overlay.classList.add('show');
+      overlay.setAttribute('aria-hidden', 'false');
+      // asegurar que el contenido esté centrado tras posibles barras UI
+      requestAnimationFrame(()=> overlay.scrollTop = 0);
+    }
+
     function winGame(){
       ended = true;
       playSound('win');
       title.style.display = 'none';
       triesEl.style.display = 'none';
       grid.style.display = 'none';
-      winnerImg.style.display = 'block';
+
       msg.textContent = '¡Descubriste una razón más!';
-      msg.style.display = 'block';
-      restartBtn.style.display = 'inline-block';
-      restartBtn.style.position = 'absolute';
-      restartBtn.style.top = 'calc(50% + 35vh + 20px)';
-      restartBtn.style.left = '50%';
-      restartBtn.style.transform = 'translateX(-50%)';
+      winnerImg.style.display = 'block';
+      openOverlay();
       launchConfetti(200);
+
+      // botón reiniciar
+      restartBtn.onclick = initGame;
     }
 
     function loseGame(){
@@ -199,14 +278,14 @@
       playSound('fail');
       title.style.display = 'none';
       triesEl.style.display = 'none';
+      grid.style.display = 'none';
+
+      // sin imagen de premio
       winnerImg.style.display = 'none';
       msg.textContent = 'Perdiste tus oportunidades';
-      msg.style.display = 'block';
-      restartBtn.style.display = 'inline-block';
-      restartBtn.style.position = 'relative';
-      restartBtn.style.top = '0';
-      restartBtn.style.left = '0';
-      restartBtn.style.transform = 'none';
+      openOverlay();
+
+      restartBtn.onclick = initGame;
     }
 
     function launchConfetti(count){
@@ -223,5 +302,6 @@
     window.onload = initGame;
   </script>
 </body>
-
 </html>
+
+
